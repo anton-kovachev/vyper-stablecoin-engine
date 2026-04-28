@@ -403,29 +403,8 @@ def test_liquidate_if_user_health_factor_is_below_minimum(
         some_user_dsc_minted = (
             dsc_engine_with_collateral_and_dsc_minted.user_to_dsc_minted(some_user)
         )
-        print("Health factor before price drop: ", health_factor_before)
-        print("Health factor after price drop: ", health_factor_after)
-        print("User DSC minted: ", some_user_dsc_minted)
-        print(
-            "Some user collateral usd value: ",
-            dsc_engine_with_collateral_and_dsc_minted.get_usd_value(
-                weth.address, AMOUNT_TO_DEPOSIT
-            ),
-        )
-
-        print(
-            "Amount deposited usd value",
-            dsc_engine_with_collateral_and_dsc_minted.get_usd_value(
-                weth.address, AMOUNT_TO_DEPOSIT
-            ),
-        )
-        print(
-            "Dsc minted ",
-            dsc_engine_with_collateral_and_dsc_minted.user_to_dsc_minted(some_user),
-        )
 
         debt_to_cover = (some_user_dsc_minted * 50) // 100
-        print("Debt to cover:", debt_to_cover)
         # with boa.reverts("DSCEngine_HealthFactorIsAboveMinimum"):
         dsc.approve(dsc_engine_with_collateral_and_dsc_minted.address, debt_to_cover)
         dsc_engine_with_collateral_and_dsc_minted.liquidate(

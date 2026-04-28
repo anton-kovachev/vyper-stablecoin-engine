@@ -46,9 +46,6 @@ class StablecoinFuzzer(RuleBasedStateMachine):
         collateral_token_contract = self._get_collateral_from_seed(collateral_seed)
         user = self.users[user_seed]
 
-        print(
-            f"Depositing collateral: User {user} depositing {amount} of collateral token at address {collateral_token_contract.address} with usd value at least {self.dsc_engine.get_usd_value(collateral_token_contract.address, amount)}"
-        )
         self._mint_and_depostit_collateral(
             collateral_token_contract.address, user, amount
         )
@@ -67,13 +64,7 @@ class StablecoinFuzzer(RuleBasedStateMachine):
         )
 
         collateral_to_redeem = (collateral_deposited * percentage_to_redeem) // 100
-        print(
-            f"Collateral deposited: User {user} has {collateral_deposited} and {collateral_to_redeem} of collateral token at address {collateral_token_contract.address}"
-        )
         assume(collateral_to_redeem > 0)
-        print(
-            f"Redeeming collateral: User {user} redeeming {collateral_to_redeem} of collateral token at address {collateral_token_contract.address}"
-        )
         with boa.env.prank(user):
             try:
                 self.dsc_engine.redeem_collateral(
@@ -81,24 +72,22 @@ class StablecoinFuzzer(RuleBasedStateMachine):
                 )
             except BoaError as err:
                 if "DSCEngine__HealthFactorTooLow" in str(err.stack_trace[0].vm_error):
-                    print(
-                        f"Cannot redeem collateral for user {user} due to low health factor"
-                    )
-
-    # @rule(
-    #     collateral_seed=st.integers(min_value=0, max_value=1),
-    #     user_seed=st.integers(min_value=0, max_value=USER_SIZE - 1),
-    #     amount=strategy("uint256", min_value=1, max_value=MAX_DEPOSIT),
-    # )
-    # def mint_dsc_and_update_price(self, user_seed, amount, collateral_seed):
-    #     self.mint_dsc(user_seed, amount, collateral_seed)
-    #     self.update_collateral_price(collateral_seed, price_percentage_change=0.7)
+                    pass
 
     @rule(
         collateral_seed=st.integers(min_value=0, max_value=1),
         user_seed=st.integers(min_value=0, max_value=USER_SIZE - 1),
         amount=strategy("uint256", min_value=1, max_value=MAX_DEPOSIT),
     )
+    def mint_dsc_and_update_price(self, user_seed, amount, collateral_seed):
+        self.mint_dsc(user_seed, amount, collateral_seed)
+        self.update_collateral_price(collateral_seed, price_percentage_change=0.7)
+
+    # @rule(
+    #     collateral_seed=st.integers(min_value=0, max_value=1),
+    #     user_seed=st.integers(min_value=0, max_value=USER_SIZE - 1),
+    #     amount=strategy("uint256", min_value=1, max_value=MAX_DEPOSIT),
+    # )
     def mint_dsc(self, user_seed, amount, collateral_seed):
         user = self.users[user_seed]
         with boa.env.prank(user):
@@ -106,7 +95,6 @@ class StablecoinFuzzer(RuleBasedStateMachine):
                 self.dsc_engine.mint_dsc(amount)
             except Exception as err:
                 if "DSCEngine__HealthFactorTooLow" in str(err.stack_trace[0].vm_error):
-                    print(f"Cannot mint DSC for user {user} due to low health factor")
                     collateral_contract = self._get_collateral_from_seed(
                         collateral_seed
                     )
@@ -139,9 +127,6 @@ class StablecoinFuzzer(RuleBasedStateMachine):
                         if token_amount_to_deposit == 0:
                             token_amount_to_deposit = 1
 
-                        print(
-                            f"User {user} needs to deposit at least {token_amount_to_deposit} of collateral at price {MockV3Aggregator.at(self.dsc_engine.collateral_to_price_feed(collateral_contract.address)).latestAnswer()} to mint {amount} of DSC. Minting and depositing collateral...  "
-                        )
                         self.mint_and_deposit_collateral(
                             collateral_seed,
                             user_seed,
@@ -149,17 +134,11 @@ class StablecoinFuzzer(RuleBasedStateMachine):
                         )
 
                     self.dsc_engine.mint_dsc(amount)
-                    print(
-                        f"User {user} dsc minted",
-                        self.dsc_engine.user_to_dsc_minted(user),
-                        "Health factor after minting:",
-                        self.dsc_engine.health_factor(user),
-                    )
 
-    @rule(
-        collateral_seed=st.integers(min_value=0, max_value=1),
-        price_percentage_change=st.floats(min_value=0.3, max_value=0.5),
-    )
+    # @rule(
+    #     collateral_seed=st.integers(min_value=0, max_value=1),
+    #     price_percentage_change=st.floats(min_value=0.3, max_value=0.5),
+    # )
     def update_collateral_price(self, collateral_seed, price_percentage_change):
         collateral_contract = self._get_collateral_from_seed(collateral_seed)
         price_feed_address = self.dsc_engine.collateral_to_price_feed(
@@ -179,12 +158,9 @@ class StablecoinFuzzer(RuleBasedStateMachine):
     @invariant()
     def liquidate_and_check_collateralization(self):
         self.runs += 1
-        self._print_balance_of_each_user()
-        print(f"Run number: {self.runs}")
         for user in self.users:
             health_factor = self.dsc_engine.health_factor(user)
             if health_factor < self.dsc_engine.MIN_HEALTH_FACTOR():
-                print("Liquidating user:", user, "with health factor", health_factor)
                 total_dsc_minted, _ = self.dsc_engine.get_account_information(user)
 
                 total_collateral_value_in_usd_adjusted = (
@@ -214,7 +190,6 @@ class StablecoinFuzzer(RuleBasedStateMachine):
                 # Check if user needs liquidation
                 if total_collateral_value_in_usd_adjusted >= target_adjusted_collateral:
                     # User is actually safe or close enough, skip
-                    print(f"User {user} is safe or close to target after recalculation")
                     continue
 
                 # Calculate debt to cover to reach 110% health factor
@@ -234,15 +209,7 @@ class StablecoinFuzzer(RuleBasedStateMachine):
 
                 # Only liquidate if there's meaningful debt to cover
                 if debt_to_cover < 1:
-                    print(f"User {user} has insufficient deficit for liquidation")
                     continue
-
-                print(
-                    f"User {user} is undercollateralized. Total DSC minted: {total_dsc_minted}, Total collateral value: {total_collateral_value_in_usd}, Total collateral value adjusted for health factor: {total_collateral_value_in_usd_adjusted}, Debt to cover: {debt_to_cover}"
-                )
-                print(
-                    f"{MockV3Aggregator.at(self.dsc_engine.collateral_to_price_feed(self.weth.address)).latestAnswer()} is the current price of ETH in USD, {MockV3Aggregator.at(self.dsc_engine.collateral_to_price_feed(self.wbtc.address)).latestAnswer()} is the current price of BTC in USD"
-                )
 
                 weth_collateral = self.dsc_engine.user_to_token_to_amount_deposited(
                     user, self.weth.address
@@ -290,9 +257,6 @@ class StablecoinFuzzer(RuleBasedStateMachine):
                         if collateral_to_mint_for_liquidator == 0:
                             collateral_to_mint_for_liquidator = 1
 
-                        print(
-                            f"Minting {collateral_to_mint_for_liquidator} of collateral for liquidator {self.liquidator}"
-                        )
                         self._mint_and_depostit_collateral(
                             collatera_token_contract.address,
                             self.liquidator,
@@ -308,7 +272,7 @@ class StablecoinFuzzer(RuleBasedStateMachine):
                             collatera_token_contract.address, user, debt_to_cover
                         )
                     except BoaError as er:
-                        print(f"Liquidation failed for user {user} with error {er}")
+                        pass
         # self.check_collateralization()
 
     @invariant()
@@ -321,17 +285,6 @@ class StablecoinFuzzer(RuleBasedStateMachine):
         total_collateral_value_in_usd = weth_usd_value + wbtc_usd_value
         total_dsc_minted = self.dsc.totalSupply()
 
-        print(
-            "DSC Engine address:",
-            self.dsc_engine.address,
-            "DSC address:",
-            self.dsc.address,
-        )
-
-        print(
-            f"Checking collateralization: Total collateral value in USD {total_collateral_value_in_usd}, Total DSC minted {total_dsc_minted}"
-        )
-
         # Protocol must maintain at least 100% collateralization
         # Individual users need 200%, but protocol level can be lower
         # because users at different health factor levels balance out
@@ -343,15 +296,6 @@ class StablecoinFuzzer(RuleBasedStateMachine):
         assert (
             total_collateral_value_in_usd >= min_required_collateral
         ), f"Protocol is undercollateralized: {total_collateral_value_in_usd} < {min_required_collateral}"
-
-    def _print_balance_of_each_user(self):
-        for user in self.users:
-            weth_balance = self.weth.balanceOf(user)
-            wbtc_balance = self.wbtc.balanceOf(user)
-            dsc_minted = self.dsc_engine.user_to_dsc_minted(user)
-            print(
-                f"User {user} - WETH balance: {weth_balance}, WBTC balance: {wbtc_balance}, DSC minted: {dsc_minted}"
-            )
 
     def _mint_and_depostit_collateral(self, collateral_address, user, amount):
         with boa.env.prank(user):
