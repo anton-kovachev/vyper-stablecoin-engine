@@ -1,0 +1,15 @@
+# pragma version 0.4.3
+"""
+@license MIT
+@author Anton
+@dev Follows the ERC20 token standard: https://eips.ethereum.org/EIPS/eip-20
+"""
+
+@external
+def burn_from(owner: address, amount: uint256):
+    ...
+
+@external
+def mint(to: address, amount: uint256):
+    ...
+    
